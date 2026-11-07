@@ -57,6 +57,9 @@ def validate_workbook(content):
                 if h not in headers:
                     error(name, 1, h, "Required column is missing.")
             extra = [h for h in headers if h not in base[name]]
+            if name == RULES:
+                # Optional human-readable template guidance is not engine input.
+                extra = [h for h in extra if h not in ("Description", "Accepted_Values")]
             if name == STUDENTS:
                 choices = [h for h in extra if isinstance(h, str) and re.fullmatch(r"Choice_[1-9][0-9]*", h)]
                 choices.sort(key=lambda h: int(h.split("_")[1]))

@@ -2,7 +2,7 @@ from io import BytesIO
 import json
 import pytest
 from openpyxl import load_workbook
-from workshop_input.models import STUDENTS, WORKSHOPS, RULES
+from workshop_input.models import STUDENTS, WORKSHOPS, RULES, DEFAULTS
 from workshop_input.validation import validate_workbook
 from workshop_input.workbook import template_bytes, report_bytes
 
@@ -112,3 +112,43 @@ def test_does_not_change_input():
     raw = template_bytes(example=True)
     validate_workbook(raw)
     assert load_workbook(BytesIO(raw))[STUDENTS]["A2"].value == "S001"
+
+
+@pytest.mark.parametrize("example", [False, True])
+def test_templates_explain_every_rule_without_extra_sheets(example):
+    book = load_workbook(BytesIO(template_bytes(example=example)))
+    assert book.sheetnames == [STUDENTS, WORKSHOPS, RULES]
+    rules = book[RULES]
+    records = list(rules.values)
+    assert records[0] == ("Rule", "Value", "Description", "Accepted_Values")
+    assert {row[0]: row[1] for row in records[1:]} == DEFAULTS
+    for row in records[1:]:
+        assert len(row[2]) > 80  # Visible explanation, not just a repeated name.
+        assert row[3]
+    assert "100 students need 200 allocations" in rules["C2"].value
+    assert "same Workshop_ID" in rules["C4"].value
+    assert "not implemented" in rules["C5"].value
+    assert "does not guarantee" in rules["C6"].value
+    assert rules["C2"].alignment.wrap_text
+
+
+def test_legacy_two_column_rules_still_validate():
+    result = edited(lambda b: b[RULES].delete_cols(3, 2))
+    assert result.valid
+    assert result.data.rules == DEFAULTS
+
+
+def test_guidance_is_not_used_as_allocation_input():
+    def change(book):
+        book[RULES]["C2"] = "An organiser's note; not a rule value."
+        book[RULES]["D2"] = None
+        book[RULES]["B2"] = 3
+    result = edited(change)
+    assert result.valid
+    assert result.data.rules == {**DEFAULTS, "Workshops_Required_Per_Student": 3}
+
+
+def test_unknown_rules_column_is_still_rejected():
+    result = edited(lambda b: setattr(b[RULES]["E1"], "value", "Other"))
+    assert not result.valid
+    assert "Unexpected column" in messages(result)

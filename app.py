@@ -9,6 +9,7 @@ st.caption("Component 1 · Prepare and validate your input workbook")
 st.info("Uploads are processed in memory by this local application. No allocation is performed. No student data is sent to external services.")
 st.subheader("1. Download a workbook")
 st.write("Choose a blank template or a synthetic example. Keep the three worksheet names and headers unchanged; add consecutive Choice_N columns as needed.")
+st.caption("In the Rules sheet, edit the yellow Value cells. Each rule has a plain-language description and accepted values beside it. These settings apply to every student.")
 left, right = st.columns(2)
 left.download_button("Download blank template", template_bytes(), "workshop_template.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 right.download_button("Download synthetic example", template_bytes(example=True), "synthetic_example.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -16,7 +17,7 @@ with st.expander("Input rules and privacy"):
     st.markdown("""- Enter identifiers, Day and Time_Slot as text. Matching is exact and case-sensitive.
 - Preferences start at Choice_1 with no gaps. Trailing blank choices are allowed; every student must rank at least one workshop.
 - Capacity and workshop requirements must be positive integers.
-- The Rules sheet uses Rule / Value columns. Omitted rules use documented defaults and generate warnings. Booleans accept Excel TRUE/FALSE or literal lowercase true/false. Balanced is the only strategy currently supported.
+- The Rules sheet uses Rule / Value columns, with optional Description / Accepted_Values guidance. Edit Value cells; keep Rule names unchanged. Omitted rules use documented defaults and generate warnings. Booleans accept Excel TRUE/FALSE or literal lowercase true/false. Balanced is reserved for the future engine and is the only accepted strategy.
 - Day + Time_Slot is the scheduling unit. Capacity belongs to each session.
 - Formulas are rejected. Input is never silently corrected.
 - Keep this app bound to localhost. Uploaded data is not saved, cached globally, or logged by the application. Downloads remain on your device; protect them as student records.""")

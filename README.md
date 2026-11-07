@@ -27,11 +27,13 @@ python -m pytest -q
 2. Fill in the workbook, preserving exactly these three worksheets:
    - **Students & Preferences**: `Student_ID`, `Class`, `Choice_1`, `Choice_2`, …
    - **Workshops & Schedule**: `Workshop_ID`, `Workshop_Name`, `Session_ID`, `Day`, `Time_Slot`, `Capacity`
-   - **Rules**: `Rule`, `Value` (one rule per row)
+   - **Rules**: `Rule`, `Value` (one rule per row), plus optional `Description` and `Accepted_Values` guidance columns
 3. Upload the `.xlsx` workbook. Review counts, errors, warnings and previews.
 4. Download the JSON validation report. Excel row numbers include the header row. Fix errors in the source workbook and upload again.
 
 ### Input contract
+
+The downloaded Rules sheet spells out what every rule means, gives examples and accepted values, and labels settings reserved for the future engine. Edit the yellow **Value** cells; all rules apply to every student. Descriptions wrap across tall rows so they can be read in Excel. Guidance columns are not used by the allocation data boundary, and older workbooks containing only `Rule` / `Value` remain supported. Exactly three worksheets are still required.
 
 Identifiers, class, workshop names, day and time slot must be literal text with no surrounding whitespace. Numeric-looking identifiers must be stored as Excel text to preserve leading zeros. Matching is exact and case-sensitive. Day and Time_Slot are labels; their pair is the scheduling unit. Uniform workshop duration is assumed. Each scheduled session has a unique Session_ID and a positive integer capacity. A Workshop_ID may appear in multiple sessions with the same Workshop_Name.
 
