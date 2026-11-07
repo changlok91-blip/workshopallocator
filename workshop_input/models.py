@@ -5,6 +5,8 @@ import pandas as pd
 STUDENTS = "Students & Preferences"
 WORKSHOPS = "Workshops & Schedule"
 RULES = "Rules"
+STRATEGIES = ("Balanced", "First-Choice Priority", "Overall Satisfaction", "Maximum Participation")
+
 DEFAULTS = {
     "Workshops_Required_Per_Student": 2,
     "Allow_Unranked_Allocation": False,

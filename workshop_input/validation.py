@@ -2,7 +2,7 @@
 import re
 from numbers import Real
 import pandas as pd
-from .models import (STUDENTS, WORKSHOPS, RULES, DEFAULTS, Issue,
+from .models import (STUDENTS, WORKSHOPS, RULES, DEFAULTS, STRATEGIES, Issue,
                      ValidationResult, ValidatedData)
 from .workbook import read_workbook
 
@@ -104,9 +104,9 @@ def validate_workbook(content):
                 if valid:
                     value = value is True or value == "true"
             elif key == "Allocation_Strategy":
-                valid = value == "Balanced"
+                valid = value in STRATEGIES
             if not valid:
-                error(RULES, row, "Value", "Invalid rule value; use positive integers, true/false, Balanced, or a nonnegative integer seed as appropriate.")
+                error(RULES, row, "Value", "Invalid rule value; use positive integers, true/false, a supported allocation strategy, or a nonnegative integer seed as appropriate.")
             else:
                 if key in ("Workshops_Required_Per_Student", "Fairness_Top_K", "Lottery_Seed"):
                     value = int(value)
@@ -162,22 +162,18 @@ def validate_workbook(content):
                     error(STUDENTS, row, choice, "Unknown Workshop_ID; match the schedule exactly.")
             student_policy.append({
                 "Student_ID": record["Student_ID"],
-                "allocation_phase": "after_ranked_students" if not seen else "ranked_students",
+                "allocation_phase": "global",
                 "blank_choice_columns": blank_choices,
-                "allow_random_unranked": bool(blank_choices) or rules["Allow_Unranked_Allocation"],
+                "allow_random_unranked": rules["Allow_Unranked_Allocation"],
             })
             if blank_choices:
-                message = (
-                    "No choices submitted: defer this student until students with preferences "
-                    "have been considered, then randomly allocate from remaining eligible sessions."
-                    if not seen else
-                    "Incomplete preferences: preserve submitted ranks; blank choices permit random "
-                    "unranked fallback after submitted preferences have been considered."
-                )
-                result.issues.append(Issue("warning", STUDENTS, row, "Choice_N", message +
-                    " This blank-choice permission applies even when Allow_Unranked_Allocation is false. "
-                    "Capacity, timetable and repeat-workshop rules still apply. No allocation is performed in Component 1."))
-            elif len(seen & workshop_ids) < rules["Workshops_Required_Per_Student"] and not rules["Allow_Unranked_Allocation"] and not rules["Allow_Repeat_Workshop"]:
+                result.issues.append(Issue(
+                    "warning", STUDENTS, row, "Choice_N",
+                    "Missing preferences are preserved. All students are optimised together; "
+                    "unranked assignments require Allow_Unranked_Allocation=true, including students "
+                    "with no choices. Validation alone does not allocate students.",
+                ))
+            if len(seen & workshop_ids) < rules["Workshops_Required_Per_Student"] and not rules["Allow_Unranked_Allocation"] and not rules["Allow_Repeat_Workshop"]:
                 result.issues.append(Issue("warning", STUDENTS, row, "Choice_N", "Fewer distinct ranked workshops than required allocations; review preferences or rules."))
         required = len(rows_by_sheet[STUDENTS]) * rules["Workshops_Required_Per_Student"]
         result.summary = {"student_count": len(rows_by_sheet[STUDENTS]), "distinct_workshop_count": len(workshop_ids), "session_count": len(rows_by_sheet[WORKSHOPS]), "total_session_capacity": total_capacity if capacity_valid else None, "required_allocations": required}

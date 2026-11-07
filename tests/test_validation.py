@@ -61,10 +61,10 @@ def test_empty_ranks():
     result = edited(change)
     assert result.valid
     policy = result.data.student_allocation_policy[0]
-    assert policy["allocation_phase"] == "after_ranked_students"
-    assert policy["allow_random_unranked"]
+    assert policy["allocation_phase"] == "global"
+    assert not policy["allow_random_unranked"]
     assert result.data.students.iloc[0]["Choice_1"] is None
-    assert any("No choices submitted" in i.message for i in result.issues)
+    assert any("Missing preferences" in i.message for i in result.issues)
 
 
 def test_dynamic_choices_and_trailing_blanks():
@@ -159,14 +159,14 @@ def test_unknown_rules_column_is_still_rejected():
     assert "Unexpected column" in messages(result)
 
 
-def test_partial_preferences_keep_ranks_and_allow_random_fallback():
+def test_partial_preferences_keep_ranks_and_respect_global_eligibility():
     result = edited(lambda b: setattr(b[STUDENTS]["D2"], "value", None))
     assert result.valid
     assert result.data.rules["Allow_Unranked_Allocation"] is False
     policy = result.data.student_allocation_policy[0]
-    assert policy["allocation_phase"] == "ranked_students"
+    assert policy["allocation_phase"] == "global"
     assert policy["blank_choice_columns"] == ["Choice_2"]
-    assert policy["allow_random_unranked"]
+    assert not policy["allow_random_unranked"]
     assert result.data.students.iloc[0]["Choice_3"] == "W03"
     assert result.data.students.iloc[0]["Choice_2"] is None
     assert result.data.student_allocation_policy[1]["allow_random_unranked"] is False
@@ -198,3 +198,10 @@ def test_inconsistent_workshop_names_detected_after_trimming_ids():
 
 def test_leading_workshop_spaces_still_rejected():
     assert not edited(lambda b: setattr(b[WORKSHOPS]["A2"], "value", " W01")).valid
+
+
+@pytest.mark.parametrize("strategy", ["Balanced", "First-Choice Priority", "Overall Satisfaction", "Maximum Participation"])
+def test_allocation_strategy_names_validate(strategy):
+    result = edited(lambda b: setattr(b[RULES]["B5"], "value", strategy))
+    assert result.valid
+    assert result.data.rules["Allocation_Strategy"] == strategy

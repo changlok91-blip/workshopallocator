@@ -1,10 +1,10 @@
-# Workshop Allocation Optimiser — Component 1
+# Workshop Allocation Optimiser — Components 1 & 2
 
-A local Streamlit application for downloading, uploading and validating school workshop input workbooks. **No allocation engine is implemented.** All included examples are synthetic.
+A Streamlit application for validating school workshop workbooks and allocating sessions with Google OR-Tools CP-SAT. The engine optimises across all students and sessions together. All examples and tests are synthetic. The Component 3 reporting/comparison dashboard is not included.
 
 ## Run locally
 
-Requires Python 3.11 or newer. Python 3.14 is supported with Streamlit 1.67.0 and PyArrow 26.0.1; the full test suite and browser upload workflow were verified on Python 3.14.9.
+Use Python 3.11 or newer. Python 3.14 is supported by the pinned Streamlit, PyArrow and OR-Tools versions.
 
 ```bash
 python -m venv .venv
@@ -15,58 +15,106 @@ python -m pip install -r requirements.txt
 python -m streamlit run app.py
 ```
 
-Open the local address printed by Streamlit. The repository config binds the app to `127.0.0.1`, disables usage telemetry, and limits uploads to 10 MB. Stop with Ctrl+C.
+Open the local address printed by Streamlit. The repository config binds to `127.0.0.1`, disables usage telemetry, and limits uploads to 10 MB. Stop with Ctrl+C. No database, credentials or remote solver is needed.
 
 ```bash
 python -m pytest -q
 ```
 
-## Workflow
+## Workflow and workbook
 
-1. Download the blank template or synthetic example.
-2. Fill in the workbook, preserving exactly these three worksheets:
+1. Download the blank template or synthetic example, or open `examples/synthetic_demo.xlsx`.
+2. Complete the workbook, preserving these three worksheets:
    - **Students & Preferences**: `Student_ID`, `Class`, `Choice_1`, `Choice_2`, …
    - **Workshops & Schedule**: `Workshop_ID`, `Workshop_Name`, `Session_ID`, `Day`, `Time_Slot`, `Capacity`
-   - **Rules**: `Rule`, `Value` (one rule per row), plus optional `Description` and `Accepted_Values` guidance columns
-3. Upload the `.xlsx` workbook. Review counts, errors, warnings and previews.
-4. Download the JSON validation report. Excel row numbers include the header row. Fix errors in the source workbook and upload again.
+   - **Rules**: `Rule`, `Value` (one rule per row), plus optional `Description` and `Accepted_Values` guidance.
+3. Upload it. Review validation messages, counts and previews; download the JSON validation report if needed.
+4. Choose an allocation strategy and time limit, then click **Run Allocation**. Invalid input cannot be run.
+5. Review assignments, per-student outcomes, incomplete allocations and solver certification. Changing the workbook, strategy or time limit clears stale results. The UI strategy override is explicit and does not modify the workbook.
 
-### Input contract
+The three-sheet template, defaults, column names and parser are retained. Older two-column Rules sheets still work. The optional template descriptions were written for Component 1: references to a future engine, Balanced-only support, and blank-choice overrides are superseded by the Component 2 rules below. Guidance is not solver input.
 
-The downloaded Rules sheet spells out what every rule means, gives examples and accepted values, and labels settings reserved for the future engine. Edit the yellow **Value** cells; all rules apply to every student. Descriptions wrap across tall rows so they can be read in Excel. Guidance columns are not used by the allocation data boundary, and older workbooks containing only `Rule` / `Value` remain supported. Exactly three worksheets are still required.
+### Validation and input contract
 
-Identifiers, class, workshop names, day and time slot must be literal text with no surrounding whitespace, except that trailing spaces in Workshop_ID and student Choice_N references are explicitly ignored. Each affected cell gets a warning; previews and validated data use the trimmed ID, and the original workbook is unchanged. Leading spaces and spaces inside IDs are not removed. Numeric-looking identifiers must be stored as Excel text to preserve leading zeros. Matching is exact and case-sensitive. Day and Time_Slot are labels; their pair is the scheduling unit. Uniform workshop duration is assumed. Each scheduled session has a unique Session_ID and a positive integer capacity. A Workshop_ID may appear in multiple sessions with the same Workshop_Name.
+Identifiers, class, workshop names, day and time slot are literal text. Numeric-looking IDs must be stored as Excel text to preserve leading zeros. Matching is case-sensitive. Trailing spaces in schedule Workshop_ID and student Choice_N references are ignored with cell-level warnings; previews and validated data show the resulting IDs, while the original workbook is unchanged. Leading spaces and internal spaces are not removed. Other fields require text without surrounding whitespace.
 
-Choice headers must run consecutively from Choice_1 with no gaps or unexpected columns. Any number is detected within workbook resource limits. Blank preference cells are allowed, including interior gaps and completely empty preferences. Submitted ranks and workbook values remain unchanged. Students with no choices are marked for allocation after students with preferences. For partial preferences, consider submitted choices first, then use random unranked fallback for missing choices if needed. This permission for blank choices overrides `Allow_Unranked_Allocation=false`; that rule still controls unranked allocation for complete preference rows. Random fallback must respect session capacity, timetable conflicts and the repeat-workshop rule; it does not guarantee an allocation. Component 1 records this policy and warnings only, without filling cells or allocating students. The future engine should use `Lottery_Seed` for reproducible random decisions. Duplicate choices and unknown workshop IDs are errors. Only the documented trailing-space exception for workshop references is applied, with warnings; there is no other trimming, renaming, deduplication or repair. Entirely empty rows are ignored; reported row numbers still match Excel. Formulas are rejected rather than evaluated. Dates/times should be entered as text labels, not Excel date/time objects.
+Choice headers must be consecutive from Choice_1; the number of columns is detected automatically. Empty choice cells and gaps are allowed, and submitted ranks are preserved. Duplicates and unknown Workshop_ID values are errors. Entirely empty rows are ignored, while report row numbers match Excel. Formulas are rejected. Enter Day and Time_Slot as text labels, not Excel date/time values. Each scheduled session has a unique Session_ID, a positive integer capacity and one Workshop_ID. Multiple sessions of that workshop must have the same Workshop_Name.
 
-| Rule | Default | Accepted values |
+| Rule | Default | Meaning / accepted values |
 | --- | --- | --- |
-| Workshops_Required_Per_Student | 2 | Positive integer |
-| Allow_Unranked_Allocation | false | Excel boolean or lowercase `true`/`false` text |
-| Allow_Repeat_Workshop | false | Excel boolean or lowercase `true`/`false` text |
-| Allocation_Strategy | Balanced | `Balanced` (reserved for a future engine) |
-| Fairness_Top_K | 3 | Positive integer |
-| Lottery_Seed | 42 | Nonnegative integer |
+| Workshops_Required_Per_Student | 2 | Positive integer: target sessions per student. |
+| Allow_Unranked_Allocation | false | Excel TRUE/FALSE or lowercase `true`/`false`: permits workshops absent from a student's submitted choices. |
+| Allow_Repeat_Workshop | false | Boolean: permits different sessions of the same Workshop_ID for a student. |
+| Allocation_Strategy | Balanced | One of the four strategy names below. |
+| Fairness_Top_K | 3 | Positive integer: coverage of the first K valid submitted choices, capped at that student's valid choice count. |
+| Lottery_Seed | 42 | Nonnegative integer: reproducible seeded tie-breaking. |
 
-An omitted rule uses its documented default with a warning; an explicitly blank or invalid value is an error. Unknown and duplicate rules are errors. A complete preference row with too few ranked workshops for the requested allocations generates a warning when both unranked allocation and repeats are disallowed. Rows with blanks instead receive an explicit random-fallback policy warning.
+Omitted rules use documented defaults with warnings; blank, unknown or duplicate rules are errors. **Component 2's strict eligibility supersedes the earlier blank-choice exception:** with unranked allocation false, even partial or blank-choice students can receive only workshops they ranked. With it true, unranked workshops are eligible with zero points. Students with no choices are included in the same global optimisation, not processed sequentially at the end. Blank cells are never populated with invented preferences.
 
-Aggregate capacity below required allocations generates a warning. **Sufficient aggregate capacity does not establish feasibility.** No scheduling, preference compatibility, fairness optimisation or allocation is performed in this component. Counts on invalid workbooks are provisional; total capacity is shown as invalid if any capacity is invalid. Structural errors must be fixed before aggregate validation can run.
+Validation warns when aggregate capacity is below requested places. Sufficient aggregate capacity does not establish feasibility: timing, eligibility and repetition constraints also matter. Uploads above 10 MB, archives above 50 MB expanded, or sheets above 100,000 rows / 2,000 columns are rejected. `.xlsx` only.
 
-## Modules and future integration
+## Allocation principles
 
-- `workshop_input/workbook.py`: in-memory template, workbook and report I/O.
-- `workshop_input/validation.py`: validation independent of Streamlit.
-- `workshop_input/models.py`: result, issue and validated-data boundary.
-- `app.py`: upload/download UI, counts and previews.
+Binary student/session variables enforce all hard constraints:
 
-Call `validate_workbook(xlsx_bytes)`. Only a result without errors exposes `result.data` (`ValidatedData`), with student/session DataFrames, detected choice columns, effective typed rules and per-student `student_allocation_policy` metadata. This is the boundary for a future OR-Tools component; no engine dependency is installed. DataFrame cells retain original values except for the documented removal of trailing spaces in workshop references; defaults apply only to omitted rules, and accepted boolean rule text is explicitly parsed.
+- Session capacity is never exceeded.
+- Each student attends at most one session for an exactly equal `(Day, Time_Slot)` pair. Other days or slots do not clash. Uniform duration is assumed.
+- Each student receives at most the required number of sessions. Incomplete allocation is allowed.
+- Repetition false means at most one session per Workshop_ID; true permits multiple distinct, non-clashing sessions, but not the same session twice.
+- Unranked eligibility follows the global rule above.
 
-## Privacy
+Linear indicator constraints track full allocation, any allocation, first-choice coverage and top-K coverage. Preference satisfaction is counted once per student/workshop even if repeated sessions are allowed. The default integer score for rank `r` is `N - r + 1`, where `N` is the number of Choice_N columns, so equivalent ranks have equal value across students. Unranked assignments score zero. Output Preference_Rank preserves the original Choice_N position; first choice means Choice_1, while top-K coverage uses the first K nonblank submitted choices.
 
-Uploaded workbooks are handled in application memory and are not written to disk, sent to external services, or cached across users by application code. Do not deploy publicly or override the localhost binding for real student records without a separate security review. Streamlit retains uploads during a browser session; clear the upload or close the application when finished. Downloads contain report details and remain on your device. The application does not log student records. Dependency installation requires network access; workbook validation does not.
+### Strategy priorities
 
-Resource limits reject uploads above 10 MB and archives above 50 MB expanded, and worksheets with more than 100,000 rows or 2,000 columns. This component accepts `.xlsx` only.
+Every strategy first maximises **fully allocated students**, then **total assigned places**. Subsequent priorities are:
 
-## Streamlit Community Cloud
+| Strategy | Third objective | Fourth objective | Final objective |
+| --- | --- | --- | --- |
+| Balanced | Students with at least one top-K choice | Preference satisfaction | Seeded tie-break |
+| First-Choice Priority | Students receiving Choice_1 | Preference satisfaction | Seeded tie-break |
+| Overall Satisfaction | Preference satisfaction | Top-K coverage | Seeded tie-break |
+| Maximum Participation | Students with any allocation | Preference satisfaction | Seeded tie-break |
 
-Deploy branch `main` with entrypoint `app.py`. Python 3.14 is supported by the pinned requirements. The explicit PyArrow pin supplies Python 3.14 wheels and avoids the source-build failure caused by the previous Streamlit dependency limit. Reboot the app after pulling these changes if Community Cloud does not rebuild automatically.
+These are separate lexicographic solves. Only a **proven optimum** is fixed before the next objective starts. A timeout ends the sequence and returns the best known feasible assignment; an unproven objective is never treated as optimal. The time budget covers validation, model construction and the objective sequence; preprocessing and result formatting can extend total elapsed time beyond the requested search budget. Output includes each stage's status/value/certification and total elapsed time. If search produces no solution before its limit, the safe empty assignment is available and is explicitly not certified optimal.
+
+Students who remain incomplete receive a neutral explanation. Neither a partially filled solution nor a timeout establishes a particular cause of infeasibility. Even a fully proven lexicographic optimum may leave students incomplete. Since assignment is optional, infeasible full-allocation requirements normally yield a feasible partial or empty solution instead of solver infeasibility.
+
+Identifiers are sorted before modelling. A local RNG seeded by Lottery_Seed supplies tie-break coefficients, and CP-SAT uses one worker. Same inputs, settings, seed, solver version and completed search reproduce results regardless of workbook row order. Runs interrupted by wall-clock limits can differ because search time depends on the machine; inspect stage certifications. This is an optimisation tie-break, not a guarantee of equal lottery probabilities. Lexicographic solving and student/session variables can be expensive on large school workbooks; use the time limit and inspect status.
+
+## Engine API and modules
+
+```python
+from pathlib import Path
+from workshop_input.validation import validate_workbook
+from workshop_allocation import allocate
+
+validated = validate_workbook(Path("examples/synthetic_demo.xlsx").read_bytes())
+if not validated.valid:
+    raise ValueError(validated.issue_frame().to_string())
+result = allocate(validated, strategy="Balanced", time_limit_seconds=30)
+print(result.summary)
+print(result.assignments)
+```
+
+The engine requires a successful Component 1 ValidationResult, revalidates the data boundary, and raises ValueError for invalid inputs or unsupported settings. It never uses the old blank-choice exception metadata to bypass eligibility. An optional `scoring(rank, N)` callable configures ranked preference points; use strictly decreasing positive integer scores as ranks increase, so every ranked workshop scores above an unranked one. Unranked points remain zero.
+
+- `workshop_input/`: existing parser, workbook templates, validation and input models.
+- `workshop_allocation/`: independently testable CP-SAT model, staged solves and structured results.
+- `app.py`: existing validation flow plus single-run allocation UI.
+- `tests/test_allocation.py`: hand-verifiable synthetic cases, strategy priorities, hard constraints, repeats, eligibility, row-order reproducibility, timeout behaviour and invalid input.
+- `examples/synthetic_demo.xlsx`: existing synthetic template example with two students, three workshops and four sessions; all students can receive two ranked, non-clashing workshops.
+
+Assignments contain Student_ID, Class, Workshop_ID, Workshop_Name, Session_ID, Day, Time_Slot, nullable Preference_Rank and Is_Unranked_Allocation. Student summaries contain required/allocated counts and full/top-K/first-choice flags. The overall summary includes population/session/capacity totals, complete/partial/zero counts, assigned places, coverage counts, ranked/unranked assignments, preference score, status, timing and certification. Coverage is a student count, not a percentage. Zero-allocation outputs retain their columns.
+
+## Privacy and deployment
+
+Uploaded workbooks and solver results stay in server memory for the current application session. Application code does not write uploads to disk, send student data to external services, log student records or use a shared data cache. Protect downloaded reports. Clear the upload or close the app when finished. Dependency installation needs network access; validation and allocation do not.
+
+Keep the app local for real student records. A hosted Streamlit deployment processes uploads on its server; do not upload real records to a public deployment without an appropriate access/privacy review. This component adds no external telemetry, external solver or authentication service.
+
+For synthetic testing on Streamlit Community Cloud, deploy branch `main`, entrypoint `app.py`. Python 3.14 is supported by the pinned dependencies; reboot if changes do not trigger a rebuild. The multi-strategy comparison dashboard and advanced allocation exports belong to Component 3 and are not implemented.
+
+## Verification
+
+The full automated suite passes on Python 3.12.14 and 3.14.9: **87 tests** on each. Tests include known objective tradeoffs, constraints, repeat scoring, four strategies, deterministic row-order behaviour, invalid inputs, and feasible/unknown timeout outcomes. Browser checks exercise each strategy, strict blank-choice eligibility, zero allocations, upload gating, and stale-result clearing.
