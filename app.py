@@ -14,12 +14,12 @@ left, right = st.columns(2)
 left.download_button("Download blank template", template_bytes(), "workshop_template.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 right.download_button("Download synthetic example", template_bytes(example=True), "synthetic_example.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 with st.expander("Input rules and privacy"):
-    st.markdown("""- Enter identifiers, Day and Time_Slot as text. Matching is exact and case-sensitive.
+    st.markdown("""- Enter identifiers, Day and Time_Slot as text. Workshop IDs ignore trailing spaces; matching otherwise remains exact and case-sensitive.
 - Blank preferences are allowed. Students with no choices are deferred until students with preferences have been considered. Partial preferences keep their submitted ranks; blanks permit random unranked fallback, even when Allow_Unranked_Allocation is false. Capacity, timetable and repeat rules still apply. No random allocation is performed in Component 1.
 - Capacity and workshop requirements must be positive integers.
 - The Rules sheet uses Rule / Value columns, with optional Description / Accepted_Values guidance. Edit Value cells; keep Rule names unchanged. Omitted rules use documented defaults and generate warnings. Booleans accept Excel TRUE/FALSE or literal lowercase true/false. Balanced is reserved for the future engine and is the only accepted strategy.
 - Day + Time_Slot is the scheduling unit. Capacity belongs to each session.
-- Formulas are rejected. Input is never silently corrected.
+- Formulas are rejected. Ignored trailing spaces in workshop IDs are reported as warnings; previews show the IDs used for validation. Other input is not silently corrected.
 - Keep this app bound to localhost. Uploaded data is not saved, cached globally, or logged by the application. Downloads remain on your device; protect them as student records.""")
 st.subheader("2. Upload and validate")
 upload = st.file_uploader("Completed Excel workbook (.xlsx, up to 10 MB)", type=["xlsx"])

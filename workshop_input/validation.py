@@ -1,4 +1,4 @@
-"""Strict validation; no trimming, case folding, rank filling, or input repair."""
+"""Validate input; explicitly ignore trailing spaces in workshop references only."""
 import re
 from numbers import Real
 import pandas as pd
@@ -43,7 +43,21 @@ def validate_workbook(content):
                 vals = [c.value for c in cells]
                 if all(v is None for v in vals):
                     continue
-                rows.append((row_num, dict(zip(headers, vals))))
+                record = dict(zip(headers, vals))
+                for column, value in record.items():
+                    workshop_reference = (
+                        name == WORKSHOPS and column == "Workshop_ID"
+                    ) or (
+                        name == STUDENTS and isinstance(column, str)
+                        and re.fullmatch(r"Choice_[1-9][0-9]*", column)
+                    )
+                    if workshop_reference and isinstance(value, str) and value != value.rstrip(" "):
+                        record[column] = value.rstrip(" ")
+                        result.issues.append(Issue(
+                            "warning", name, row_num, column,
+                            "Trailing spaces ignored in workshop ID; preview and validated data use the ID without trailing spaces. Original workbook is unchanged.",
+                        ))
+                rows.append((row_num, record))
                 for cell in cells:
                     if cell.data_type == "f":
                         error(name, row_num, str(headers[cell.column - 1]), "Formulas are not accepted; enter a literal value.")

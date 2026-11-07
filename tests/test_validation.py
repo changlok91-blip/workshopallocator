@@ -170,3 +170,31 @@ def test_partial_preferences_keep_ranks_and_allow_random_fallback():
     assert result.data.students.iloc[0]["Choice_3"] == "W03"
     assert result.data.students.iloc[0]["Choice_2"] is None
     assert result.data.student_allocation_policy[1]["allow_random_unranked"] is False
+
+
+def test_workshop_references_ignore_trailing_spaces_with_warnings():
+    def change(book):
+        book[WORKSHOPS]["A2"] = "W01  "
+        book[STUDENTS]["C2"] = "W01 "
+    result = edited(change)
+    assert result.valid
+    assert result.data.sessions.iloc[0]["Workshop_ID"] == "W01"
+    assert result.data.students.iloc[0]["Choice_1"] == "W01"
+    assert sum("Trailing spaces ignored" in i.message for i in result.issues) == 2
+
+
+def test_duplicate_choices_detected_after_ignoring_trailing_spaces():
+    result = edited(lambda b: setattr(b[STUDENTS]["D2"], "value", "W01 "))
+    assert not result.valid
+    assert "Duplicate preference" in messages(result)
+
+
+def test_inconsistent_workshop_names_detected_after_trimming_ids():
+    def change(book):
+        book[WORKSHOPS]["A3"] = "W01 "
+        book[WORKSHOPS]["B3"] = "Other name"
+    assert "consistent" in messages(edited(change))
+
+
+def test_leading_workshop_spaces_still_rejected():
+    assert not edited(lambda b: setattr(b[WORKSHOPS]["A2"], "value", " W01")).valid
