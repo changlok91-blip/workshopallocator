@@ -171,3 +171,7 @@ locked_result = allocate(validated, strategy="Balanced",
 ```
 
 Unknown identifiers, ineligible sessions and conflicting locks raise `LockConflict` (a `ValueError`) with specific messages. Use `AllocationWorkspace.apply_locks` for atomic edit/run/audit behaviour when building another presentation layer.
+
+## After a Streamlit Cloud code update
+
+If Run Allocation reports an incompatible allocator or an unexpected `locks` keyword, the server may still have a pre-Component-3 allocator imported. Use **Manage app → Reboot app**, then re-upload the workbook. Rebooting clears session-local locks and audit history; download current reports first if available. The app imports the engine directly and checks call compatibility before solving. It will never retry by discarding manual locks.

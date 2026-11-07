@@ -2,10 +2,11 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import hashlib
+import inspect
 import json
 from uuid import uuid4
 from workshop_input.models import STRATEGIES, ValidationResult
-from workshop_allocation import allocate
+from workshop_allocation.engine import allocate
 from workshop_allocation.locks import validate_locks
 
 
@@ -76,6 +77,17 @@ class AllocationWorkspace:
     def _solve(self, validation, strategy, seconds, locks):
         if not self.fingerprint:
             raise ValueError("Upload and validate a workbook first.")
+        # Streamlit can retain an older package re-export after a source update.
+        # Import directly from engine above and fail safely if that module itself
+        # is still old. Never retry without locks or reinterpret other TypeErrors.
+        try:
+            inspect.signature(allocate).bind(validation, strategy=strategy, time_limit_seconds=seconds, locks=locks)
+        except TypeError:
+            raise ValueError(
+                "The running allocator is an older version without manual-lock support. "
+                "In Streamlit Cloud, choose Manage app → Reboot app, then upload your workbook again. "
+                "No locks or existing results have been changed."
+            )
         allocation = allocate(validation, strategy=strategy, time_limit_seconds=seconds, locks=locks)
         return RunRecord(allocation, context_key(self.fingerprint, validation.data, seconds, locks),
                          self.fingerprint, {**validation.data.rules, "Allocation_Strategy": strategy},
