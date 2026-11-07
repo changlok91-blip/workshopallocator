@@ -4,7 +4,7 @@ A local Streamlit application for downloading, uploading and validating school w
 
 ## Run locally
 
-Requires Python 3.11 or newer (tested with Python 3.12).
+Requires Python 3.11 or newer. Python 3.14 is supported with Streamlit 1.67.0 and PyArrow 26.0.1; the full test suite and browser upload workflow were verified on Python 3.14.9.
 
 ```bash
 python -m venv .venv
@@ -64,3 +64,7 @@ Call `validate_workbook(xlsx_bytes)`. Only a result without errors exposes `resu
 Uploaded workbooks are handled in application memory and are not written to disk, sent to external services, or cached across users by application code. Do not deploy publicly or override the localhost binding for real student records without a separate security review. Streamlit retains uploads during a browser session; clear the upload or close the application when finished. Downloads contain report details and remain on your device. The application does not log student records. Dependency installation requires network access; workbook validation does not.
 
 Resource limits reject uploads above 10 MB and archives above 50 MB expanded, and worksheets with more than 100,000 rows or 2,000 columns. This component accepts `.xlsx` only.
+
+## Streamlit Community Cloud
+
+Deploy branch `main` with entrypoint `app.py`. Python 3.14 is supported by the pinned requirements. The explicit PyArrow pin supplies Python 3.14 wheels and avoids the source-build failure caused by the previous Streamlit dependency limit. Reboot the app after pulling these changes if Community Cloud does not rebuild automatically.
