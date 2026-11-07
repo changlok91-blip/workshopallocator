@@ -37,7 +37,7 @@ The downloaded Rules sheet spells out what every rule means, gives examples and 
 
 Identifiers, class, workshop names, day and time slot must be literal text with no surrounding whitespace. Numeric-looking identifiers must be stored as Excel text to preserve leading zeros. Matching is exact and case-sensitive. Day and Time_Slot are labels; their pair is the scheduling unit. Uniform workshop duration is assumed. Each scheduled session has a unique Session_ID and a positive integer capacity. A Workshop_ID may appear in multiple sessions with the same Workshop_Name.
 
-Choice headers must run consecutively from Choice_1 with no gaps or unexpected columns. Any number is detected within workbook resource limits. Each student ranks at least one workshop; preference cells may have trailing blanks but no interior gaps. Duplicate choices and unknown workshop IDs are errors. There is no silent trimming, renaming, deduplication or repair. Entirely empty rows are ignored; reported row numbers still match Excel. Formulas are rejected rather than evaluated. Dates/times should be entered as text labels, not Excel date/time objects.
+Choice headers must run consecutively from Choice_1 with no gaps or unexpected columns. Any number is detected within workbook resource limits. Blank preference cells are allowed, including interior gaps and completely empty preferences. Submitted ranks and workbook values remain unchanged. Students with no choices are marked for allocation after students with preferences. For partial preferences, consider submitted choices first, then use random unranked fallback for missing choices if needed. This permission for blank choices overrides `Allow_Unranked_Allocation=false`; that rule still controls unranked allocation for complete preference rows. Random fallback must respect session capacity, timetable conflicts and the repeat-workshop rule; it does not guarantee an allocation. Component 1 records this policy and warnings only, without filling cells or allocating students. The future engine should use `Lottery_Seed` for reproducible random decisions. Duplicate choices and unknown workshop IDs are errors. There is no silent trimming, renaming, deduplication or repair. Entirely empty rows are ignored; reported row numbers still match Excel. Formulas are rejected rather than evaluated. Dates/times should be entered as text labels, not Excel date/time objects.
 
 | Rule | Default | Accepted values |
 | --- | --- | --- |
@@ -48,7 +48,7 @@ Choice headers must run consecutively from Choice_1 with no gaps or unexpected c
 | Fairness_Top_K | 3 | Positive integer |
 | Lottery_Seed | 42 | Nonnegative integer |
 
-An omitted rule uses its documented default with a warning; an explicitly blank or invalid value is an error. Unknown and duplicate rules are errors. Too few ranked workshops for the requested allocations generates a warning when both unranked allocation and repeats are disallowed.
+An omitted rule uses its documented default with a warning; an explicitly blank or invalid value is an error. Unknown and duplicate rules are errors. A complete preference row with too few ranked workshops for the requested allocations generates a warning when both unranked allocation and repeats are disallowed. Rows with blanks instead receive an explicit random-fallback policy warning.
 
 Aggregate capacity below required allocations generates a warning. **Sufficient aggregate capacity does not establish feasibility.** No scheduling, preference compatibility, fairness optimisation or allocation is performed in this component. Counts on invalid workbooks are provisional; total capacity is shown as invalid if any capacity is invalid. Structural errors must be fixed before aggregate validation can run.
 
@@ -59,7 +59,7 @@ Aggregate capacity below required allocations generates a warning. **Sufficient 
 - `workshop_input/models.py`: result, issue and validated-data boundary.
 - `app.py`: upload/download UI, counts and previews.
 
-Call `validate_workbook(xlsx_bytes)`. Only a result without errors exposes `result.data` (`ValidatedData`), with student/session DataFrames, detected choice columns and effective typed rules. This is the boundary for a future OR-Tools component; no engine dependency is installed. DataFrame cells retain original values; defaults apply only to omitted rules, and accepted boolean rule text is explicitly parsed.
+Call `validate_workbook(xlsx_bytes)`. Only a result without errors exposes `result.data` (`ValidatedData`), with student/session DataFrames, detected choice columns, effective typed rules and per-student `student_allocation_policy` metadata. This is the boundary for a future OR-Tools component; no engine dependency is installed. DataFrame cells retain original values; defaults apply only to omitted rules, and accepted boolean rule text is explicitly parsed.
 
 ## Privacy
 

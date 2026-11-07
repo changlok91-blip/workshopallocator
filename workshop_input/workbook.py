@@ -16,7 +16,9 @@ RULE_GUIDANCE = {
     ),
     "Allow_Unranked_Allocation": (
         "Whether students may receive workshops they did not rank. FALSE means "
-        "ranked choices only; TRUE permits other workshops. This permission is "
+        "ranked choices only for complete preference rows; TRUE permits other workshops. "
+        "Blank choices always permit random unranked fallback; students with no choices "
+        "are considered last. Capacity, timetable and repeat rules still apply. This permission is "
         "for the future allocation engine; no allocation is performed now.",
         "Excel TRUE or FALSE, or lowercase text true or false.",
     ),
@@ -89,7 +91,7 @@ def template_bytes(example=False, choice_count=3):
     for letter, width in {"A": 42, "B": 16, "C": 85, "D": 44}.items():
         rules.column_dimensions[letter].width = width
     for row in rules.iter_rows(min_row=2):
-        rules.row_dimensions[row[0].row].height = 90
+        rules.row_dimensions[row[0].row].height = 120
         for cell in row:
             cell.alignment = Alignment(vertical="top", wrap_text=True)
         row[1].fill = PatternFill("solid", fgColor="FFF2CC")

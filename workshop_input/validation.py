@@ -131,25 +131,39 @@ def validate_workbook(content):
                 capacity_valid = False
             else:
                 total_capacity += int(record["Capacity"])
+        student_policy = []
         for row, record in rows_by_sheet[STUDENTS]:
             required_text(STUDENTS, row, record, ["Student_ID", "Class"])
             seen = set()
-            gap = False
+            blank_choices = []
             for choice in choices:
                 value = record[choice]
                 if value is None:
-                    gap = True
+                    blank_choices.append(choice)
                     continue
-                if gap:
-                    error(STUDENTS, row, choice, "Preference ranks must start at Choice_1 and have no blank gaps; trailing blanks are allowed.")
                 if value in seen:
                     error(STUDENTS, row, choice, "Duplicate preference choice within this student.")
                 seen.add(value)
                 if value not in workshop_ids:
                     error(STUDENTS, row, choice, "Unknown Workshop_ID; match the schedule exactly.")
-            if not seen:
-                error(STUDENTS, row, "Choice_1", "Each student must rank at least one valid workshop.")
-            if len(seen & workshop_ids) < rules["Workshops_Required_Per_Student"] and not rules["Allow_Unranked_Allocation"] and not rules["Allow_Repeat_Workshop"]:
+            student_policy.append({
+                "Student_ID": record["Student_ID"],
+                "allocation_phase": "after_ranked_students" if not seen else "ranked_students",
+                "blank_choice_columns": blank_choices,
+                "allow_random_unranked": bool(blank_choices) or rules["Allow_Unranked_Allocation"],
+            })
+            if blank_choices:
+                message = (
+                    "No choices submitted: defer this student until students with preferences "
+                    "have been considered, then randomly allocate from remaining eligible sessions."
+                    if not seen else
+                    "Incomplete preferences: preserve submitted ranks; blank choices permit random "
+                    "unranked fallback after submitted preferences have been considered."
+                )
+                result.issues.append(Issue("warning", STUDENTS, row, "Choice_N", message +
+                    " This blank-choice permission applies even when Allow_Unranked_Allocation is false. "
+                    "Capacity, timetable and repeat-workshop rules still apply. No allocation is performed in Component 1."))
+            elif len(seen & workshop_ids) < rules["Workshops_Required_Per_Student"] and not rules["Allow_Unranked_Allocation"] and not rules["Allow_Repeat_Workshop"]:
                 result.issues.append(Issue("warning", STUDENTS, row, "Choice_N", "Fewer distinct ranked workshops than required allocations; review preferences or rules."))
         required = len(rows_by_sheet[STUDENTS]) * rules["Workshops_Required_Per_Student"]
         result.summary = {"student_count": len(rows_by_sheet[STUDENTS]), "distinct_workshop_count": len(workshop_ids), "session_count": len(rows_by_sheet[WORKSHOPS]), "total_session_capacity": total_capacity if capacity_valid else None, "required_allocations": required}
@@ -157,7 +171,7 @@ def validate_workbook(content):
             result.issues.append(Issue("warning", WORKSHOPS, None, "Capacity", "Aggregate capacity is below total required allocations."))
         result.issues.append(Issue("warning", "Workbook", None, "", "Aggregate capacity does not prove feasibility. Scheduling conflicts, preferences and rules are not solved in Component 1."))
         if result.valid:
-            result.data = ValidatedData(result.frames[STUDENTS].copy(), result.frames[WORKSHOPS].copy(), rules, choices)
+            result.data = ValidatedData(result.frames[STUDENTS].copy(), result.frames[WORKSHOPS].copy(), rules, choices, student_policy)
         return result
     except (ValueError, TypeError, KeyError, OSError, IndexError) as exc:
         error("Workbook", None, "", "Workbook contents are malformed or unsupported; export a fresh .xlsx using the template.")

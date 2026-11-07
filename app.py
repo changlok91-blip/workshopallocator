@@ -15,7 +15,7 @@ left.download_button("Download blank template", template_bytes(), "workshop_temp
 right.download_button("Download synthetic example", template_bytes(example=True), "synthetic_example.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 with st.expander("Input rules and privacy"):
     st.markdown("""- Enter identifiers, Day and Time_Slot as text. Matching is exact and case-sensitive.
-- Preferences start at Choice_1 with no gaps. Trailing blank choices are allowed; every student must rank at least one workshop.
+- Blank preferences are allowed. Students with no choices are deferred until students with preferences have been considered. Partial preferences keep their submitted ranks; blanks permit random unranked fallback, even when Allow_Unranked_Allocation is false. Capacity, timetable and repeat rules still apply. No random allocation is performed in Component 1.
 - Capacity and workshop requirements must be positive integers.
 - The Rules sheet uses Rule / Value columns, with optional Description / Accepted_Values guidance. Edit Value cells; keep Rule names unchanged. Omitted rules use documented defaults and generate warnings. Booleans accept Excel TRUE/FALSE or literal lowercase true/false. Balanced is reserved for the future engine and is the only accepted strategy.
 - Day + Time_Slot is the scheduling unit. Capacity belongs to each session.
@@ -49,5 +49,7 @@ if upload is not None:
         with st.expander(name, expanded=result.valid and name == STUDENTS):
             st.dataframe(frame, hide_index=True, width="stretch")
     if result.data:
+        with st.expander("Missing-choice allocation policy (for the future engine)"):
+            st.dataframe(result.data.student_allocation_policy, hide_index=True, width="stretch")
         with st.expander("Effective rules (including documented defaults)"):
             st.json(result.data.rules)

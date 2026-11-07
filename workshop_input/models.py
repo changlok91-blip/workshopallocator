@@ -28,6 +28,7 @@ class ValidatedData:
     sessions: pd.DataFrame
     rules: dict[str, Any]
     choice_columns: list[str]
+    student_allocation_policy: list[dict[str, Any]] = field(default_factory=list)
 
 @dataclass
 class ValidationResult:

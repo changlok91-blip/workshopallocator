@@ -42,7 +42,6 @@ def test_valid_example_and_report():
     (RULES, "B5", "Other", "Invalid rule"),
     (RULES, "B6", 0, "Invalid rule"),
     (RULES, "B7", -1, "Invalid rule"),
-    (STUDENTS, "C2", None, "no blank gaps"),
     (STUDENTS, "C1", "Choice_0", "consecutive"),
     (STUDENTS, "A1", "student_id", "Required column"),
     (WORKSHOPS, "F2", "=1+1", "Formulas"),
@@ -59,7 +58,13 @@ def test_empty_ranks():
     def change(b):
         for cell in ("C2", "D2", "E2"):
             b[STUDENTS][cell] = None
-    assert "at least one" in messages(edited(change))
+    result = edited(change)
+    assert result.valid
+    policy = result.data.student_allocation_policy[0]
+    assert policy["allocation_phase"] == "after_ranked_students"
+    assert policy["allow_random_unranked"]
+    assert result.data.students.iloc[0]["Choice_1"] is None
+    assert any("No choices submitted" in i.message for i in result.issues)
 
 
 def test_dynamic_choices_and_trailing_blanks():
@@ -152,3 +157,16 @@ def test_unknown_rules_column_is_still_rejected():
     result = edited(lambda b: setattr(b[RULES]["E1"], "value", "Other"))
     assert not result.valid
     assert "Unexpected column" in messages(result)
+
+
+def test_partial_preferences_keep_ranks_and_allow_random_fallback():
+    result = edited(lambda b: setattr(b[STUDENTS]["D2"], "value", None))
+    assert result.valid
+    assert result.data.rules["Allow_Unranked_Allocation"] is False
+    policy = result.data.student_allocation_policy[0]
+    assert policy["allocation_phase"] == "ranked_students"
+    assert policy["blank_choice_columns"] == ["Choice_2"]
+    assert policy["allow_random_unranked"]
+    assert result.data.students.iloc[0]["Choice_3"] == "W03"
+    assert result.data.students.iloc[0]["Choice_2"] is None
+    assert result.data.student_allocation_policy[1]["allow_random_unranked"] is False
