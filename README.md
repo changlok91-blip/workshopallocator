@@ -1,6 +1,6 @@
-# Workshop Allocation Optimiser — Components 1 & 2
+# Workshop Allocation Optimiser — Components 1, 2 & 3
 
-A Streamlit application for validating school workshop workbooks and allocating sessions with Google OR-Tools CP-SAT. The engine optimises across all students and sessions together. All examples and tests are synthetic. The Component 3 reporting/comparison dashboard is not included.
+A Streamlit application for validating school workshop workbooks and allocating sessions with Google OR-Tools CP-SAT. The engine optimises across all students and sessions together. All examples and tests are synthetic. The dashboard, strategy comparison, manual locks, student/session viewers and Excel reporting are included.
 
 ## Run locally
 
@@ -30,7 +30,7 @@ python -m pytest -q
    - **Rules**: `Rule`, `Value` (one rule per row), plus optional `Description` and `Accepted_Values` guidance.
 3. Upload it. Review validation messages, counts and previews; download the JSON validation report if needed.
 4. Choose an allocation strategy and time limit, then click **Run Allocation**. Invalid input cannot be run.
-5. Review assignments, workshop allocation counts/capacity, preference-choice percentages, per-student outcomes, incomplete allocations and solver certification. Changing the workbook, strategy or time limit clears stale results. The UI strategy override is explicit and does not modify the workbook.
+5. Review assignments, workshop allocation counts/capacity, preference-choice percentages, per-student outcomes, incomplete allocations and solver certification. Changing the workbook clears results and locks with a visible warning. Changed settings make prior runs outdated; selecting a strategy already computed under the exact current settings reuses that run. The UI strategy override is explicit and does not modify the workbook.
 
 The three-sheet template, defaults, column names and parser are retained. Older two-column Rules sheets still work. The optional template descriptions were written for Component 1: references to a future engine, Balanced-only support, and blank-choice overrides are superseded by the Component 2 rules below. Guidance is not solver input.
 
@@ -101,7 +101,7 @@ The engine requires a successful Component 1 ValidationResult, revalidates the d
 
 - `workshop_input/`: existing parser, workbook templates, validation and input models.
 - `workshop_allocation/`: independently testable CP-SAT model, staged solves and structured results.
-- `app.py`: existing validation flow plus single-run allocation UI.
+- `app.py`: seven-section Streamlit workflow; presentation helpers live in `workshop_reporting/ui.py`.
 - `tests/test_allocation.py`: hand-verifiable synthetic cases, strategy priorities, hard constraints, repeats, eligibility, row-order reproducibility, timeout behaviour and invalid input.
 - `examples/synthetic_demo.xlsx`: existing synthetic template example with two students, three workshops and four sessions; all students can receive two ranked, non-clashing workshops.
 
@@ -113,14 +113,61 @@ Uploaded workbooks and solver results stay in server memory for the current appl
 
 Keep the app local for real student records. A hosted Streamlit deployment processes uploads on its server; do not upload real records to a public deployment without an appropriate access/privacy review. This component adds no external telemetry, external solver or authentication service.
 
-For synthetic testing on Streamlit Community Cloud, deploy branch `main`, entrypoint `app.py`. Python 3.14 is supported by the pinned dependencies; reboot if changes do not trigger a rebuild. The multi-strategy comparison dashboard and advanced allocation exports belong to Component 3 and are not implemented.
+For synthetic testing on Streamlit Community Cloud, deploy branch `main`, entrypoint `app.py`. Python 3.14 is supported by the pinned dependencies; reboot if changes do not trigger a rebuild. All three components run in the same application; no database, authentication, multi-user storage or academic subject allocation is implemented.
 
 ## Verification
 
-The original engine suite passed 87 tests on Python 3.12.14 and 3.14.9. With allocation-distribution tests, the suite now contains **92 tests**. Tests include known objective tradeoffs, constraints, repeat scoring, four strategies, deterministic row-order behaviour, invalid inputs, and feasible/unknown timeout outcomes. Browser checks exercise each strategy, strict blank-choice eligibility, zero allocations, upload gating, and stale-result clearing.
+Before Component 3 work, all **92 existing tests** passed. New reporting, lock, state, export and UI tests extend this to **119 passing tests on both Python 3.12.14 and 3.14.9**. Tests include known objective tradeoffs, constraints, repeat scoring, four strategies, deterministic row-order behaviour, invalid inputs, and feasible/unknown timeout outcomes. Browser checks exercise each strategy, strict blank-choice eligibility, zero allocations, upload gating, and stale-result clearing.
 
 ## Allocation distributions
 
 After each run, workshop charts and tables show assigned session places, distinct students, total capacity, available places and fill percentage, including workshops with zero allocations. Repeat sessions consume multiple places but count the student only once within that workshop.
 
 Preference charts include every Choice_N rank, unranked allocations and students with no allocation. **Each choice received** counts distinct students receiving that exact rank, divided by all students in the workbook; a student may appear at several ranks, so the percentages can sum above 100%. **Best choice per student** assigns each student to their best received rank, unranked only, or no allocation; these mutually exclusive proportions sum to 100% before rounding. Both views include students without allocations in the denominator.
+
+
+## Dashboard, comparison and review
+
+Use the seven application tabs in order:
+
+1. **Upload & Validate** — existing three-sheet download/upload and cell-level feedback. Validation is cached only within your own session for that input fingerprint.
+2. **Run Allocation** — choose a temporary strategy/time limit, inspect Excel rules separately, then explicitly run. The dashboard recomputes student and assignment counts from the actual assignment records, displays the configured Fairness_Top_K, shows status/certification/warnings and plots rank distribution and session utilisation.
+3. **Compare Strategies** — run all four strategies on the exact same input, hard constraints, seed and locks. Each gets the same time limit. The table separates first-choice student coverage from first-choice assignment counts. Pick a strategy and click **View selected strategy details** to use its saved current run without solving again. Unproven results are flagged; there is no universal-best recommendation.
+4. **Student Allocations** — search Student ID and filter class, completeness, first choice, top-K and unranked status. Select a student to see original preferences, assigned sessions, completeness, active locks and a clash-checked day/time timetable.
+5. **Workshop Rosters** — search workshop/session identifiers, names, day or slot. See capacity, vacancies, utilisation and participants for every session, including empty ones. Download the selected session's participant workbook.
+6. **Manual Adjustments** — lock an existing assignment, request a session, or unlock a pair. Every action validates and reruns through CP-SAT. Locks are `(Student_ID, Session_ID)` pairs, never direct output edits. To replace a locked session, unlock it first, then request the desired session. Unlocked assignments may change; locking a session does not change its eligibility or guarantee other assignments.
+7. **Export Results** — download the selected current allocation as a formatted eight-sheet workbook.
+
+Manual locks obey capacity, exact day/slot clashes, required quantity, repetition and ranked eligibility. Invalid combinations identify the conflicting student/session or rule, are recorded as rejected attempts, and leave previous locks and valid results unchanged. Valid lock edits are committed only after a successful solver response. Because assignment counts are upper-bounded, a set of independently valid locks itself forms a feasible baseline; timeout before search can safely return those locks with **UNKNOWN / not proven optimal**, never an invented completed allocation.
+
+All four strategy solves and exports use the same active locks. Fingerprints include the raw workbook SHA-256, actual validated tables, hard rules, time limit and locks. Changing these makes old runs ineligible for current views/exports. Upload replacement clears locks explicitly; a rejected edit does not remove any lock. Audit history is session-local, associated with its input fingerprint, and contains UTC timestamps, lock actions, rejections and run IDs. Displayed run times use Singapore time. Ordinary filtering, viewing and downloading do not rerun the solver. Workbooks and results are not stored in a shared cache.
+
+## Excel reports
+
+The output workbook has these eight sheets (the **input** workbook still has exactly three):
+
+| Sheet | Contents |
+| --- | --- |
+| Summary | Input totals, selected strategy, applied rules, outcomes, solver status and warnings. |
+| Student Allocations | IDs/classes, assigned workshops/sessions/times, preference rank, unranked flag and manual-lock flag. |
+| Student Status | One row per student, required/allocated counts, completeness, first/top-K and unranked coverage. |
+| Workshop Rosters | Participant rows grouped and sorted by Session_ID, then class/student. |
+| Workshop Utilisation | Each scheduled session's capacity, allocated count, remaining places and utilisation percentage. |
+| Exceptions | Partial/zero allocations, unranked assignments, input/solver warnings and rejected manual requests marked as not applied. |
+| Strategy Comparison | The current comparison, or an explicit note that no comparison has been run. |
+| Settings & Audit | Excel versus applied rules, strategy, seed, locks, input/settings fingerprints, solver stages/version/timing, run IDs and audit history. |
+
+Headers are frozen, filters enabled, columns sized, text wrapped and percentage columns formatted. User-supplied text is written as literal XLSX strings rather than formulas, including identifiers beginning with `=`, `+`, `-` or `@`. No student names or additional personal fields are added. Exports and per-session downloads are generated in memory, and backend freshness checks reject mismatched inputs/settings/locks even outside the UI.
+
+Reporting lives in `workshop_reporting/analytics.py`, `workspace.py`, `export.py` and `ui.py`. Mandatory-lock validation lives in `workshop_allocation/locks.py`; the existing CP-SAT engine only adds equality constraints for validated pairs and retains its lexicographic objectives. Existing pandas/openpyxl/Streamlit dependencies cover Component 3; no additional package is required.
+
+Limitations: there is no authentication, shared storage, database or durable audit persistence. Export the audit workbook before closing the application if needed. Timetables use exact labels with uniform-duration sessions, not interval-overlap scheduling. Solver timeouts can produce incomplete and unproven results; compare them with care. Large datasets can be expensive because comparing strategies performs four solves. The tests include hand-verifiable cases and a 60-student / 24-session synthetic dataset.
+
+For direct engine use with mandatory locks:
+
+```python
+locked_result = allocate(validated, strategy="Balanced",
+                         locks=[("S001", "R1")], time_limit_seconds=30)
+```
+
+Unknown identifiers, ineligible sessions and conflicting locks raise `LockConflict` (a `ValueError`) with specific messages. Use `AllocationWorkspace.apply_locks` for atomic edit/run/audit behaviour when building another presentation layer.

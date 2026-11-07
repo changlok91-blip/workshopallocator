@@ -1,8 +1,8 @@
 """Capacity-safe global allocation, with one proven optimum per priority stage.
 
 Input is the Component 1 validation result. Allocation never modifies source
-frames, persists student data, or uses the network. No allocation is mandatory:
-the all-zero assignment always respects the hard constraints.
+frames, persists student data, or uses the network. Without locks, the all-zero
+assignment respects the hard constraints. Valid locks form a feasible baseline.
 """
 from collections import defaultdict
 from io import BytesIO
@@ -18,6 +18,7 @@ from ortools.sat.python import cp_model
 
 from workshop_input.models import DEFAULTS, RULES, STUDENTS, WORKSHOPS, ValidatedData, ValidationResult
 from workshop_input.validation import validate_workbook
+from .locks import validate_locks
 from .models import ASSIGNMENT_COLUMNS, STUDENT_COLUMNS, AllocationResult, StageResult
 
 
@@ -58,8 +59,13 @@ def _validated_copy(validation: ValidationResult) -> ValidatedData:
         for title, frame in [(STUDENTS, source.students), (WORKSHOPS, source.sessions)]:
             sheet = workbook.create_sheet(title)
             sheet.append(list(frame.columns))
-            for record in frame.itertuples(index=False, name=None):
-                sheet.append([None if pd.isna(value) else value for value in record])
+            for row_number, record in enumerate(frame.itertuples(index=False, name=None), start=2):
+                for column_number, value in enumerate(record, start=1):
+                    value = None if pd.isna(value) else value
+                    cell = sheet.cell(row_number, column_number, value=value)
+                    # Preserve validated literal identifiers, including '=…'.
+                    if isinstance(value, str):
+                        cell.data_type = "s"
         sheet = workbook.create_sheet(RULES)
         sheet.append(["Rule", "Value"])
         for key, value in source.rules.items():
@@ -92,12 +98,13 @@ def allocate(
     strategy: str | None = None,
     time_limit_seconds: float = 30.0,
     scoring: Callable[[int, int], int] | None = None,
+    locks=(),
 ) -> AllocationResult:
     """Allocate valid input without exceeding capacities or sacrificing proven priorities.
 
     ``time_limit_seconds`` is a global budget for the optimisation stages, not a
     separate budget for each stage. It includes model construction and validation.
-    A zero budget returns the known feasible empty allocation, uncertified.
+    A zero budget returns the validated locks (or empty allocation), uncertified.
     ``scoring(rank, maximum_choice_columns)`` must return strictly descending,
     positive integer scores. Repeat sessions earn a workshop's score only once.
     Strict Allow_Unranked_Allocation applies also to students with blank choices.
@@ -106,6 +113,7 @@ def allocate(
     if isinstance(time_limit_seconds, bool) or not isinstance(time_limit_seconds, Real) or not math.isfinite(time_limit_seconds) or time_limit_seconds < 0:
         raise ValueError("time_limit_seconds must be a finite nonnegative number.")
     data = _validated_copy(validation)
+    locked_pairs = validate_locks(data, locks)
     selected_strategy = data.rules["Allocation_Strategy"] if strategy is None else strategy
     order = objective_order(selected_strategy)
     rules = data.rules
@@ -150,6 +158,11 @@ def allocate(
             per_session[j].append(var)
             per_slot[i, session["Day"], session["Time_Slot"]].append(var)
             per_workshop[i, workshop].append(var)
+    student_indices = {row["Student_ID"]: i for i, row in enumerate(students)}
+    session_indices = {row["Session_ID"]: j for j, row in enumerate(sessions)}
+    locked_edges = {(student_indices[sid], session_indices[session_id]) for sid, session_id in locked_pairs}
+    for edge in sorted(locked_edges):
+        model.add(x[edge] == 1)
     for j, session in enumerate(sessions):
         model.add(sum(per_session[j]) <= min(int(session["Capacity"]), len(students)))
     for variables in per_slot.values():
@@ -202,7 +215,7 @@ def allocate(
         "seeded_tie_break": sum(weight * var for weight, var in zip(tie_weights, x.values())),
     }
     stages = []
-    best = set()  # Known feasible baseline under all original hard constraints.
+    best = set(locked_edges)  # Validated locks alone are a feasible baseline.
     status_name = "UNKNOWN"
     has_solver_solution = False
     warnings = []
