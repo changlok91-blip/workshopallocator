@@ -57,6 +57,10 @@ def test_valid_upload_runs_and_displays_allocation_metrics():
         allocation_button(app).click().run()
         assert not app.exception
         assert has_allocation_preview(app)
+        headings = [heading.value for heading in app.subheader]
+        assert "Workshop allocation distribution" in headings
+        assert "Preference choice distribution" in headings
+        assert [tab.label for tab in app.tabs] == ["Each choice received", "Best choice per student"]
         metrics = {metric.label: metric.value for metric in app.metric}
         assert metrics["Fully allocated"] == "2"
         assert metrics["Assigned places"] == "4"

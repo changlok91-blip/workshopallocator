@@ -30,7 +30,7 @@ python -m pytest -q
    - **Rules**: `Rule`, `Value` (one rule per row), plus optional `Description` and `Accepted_Values` guidance.
 3. Upload it. Review validation messages, counts and previews; download the JSON validation report if needed.
 4. Choose an allocation strategy and time limit, then click **Run Allocation**. Invalid input cannot be run.
-5. Review assignments, per-student outcomes, incomplete allocations and solver certification. Changing the workbook, strategy or time limit clears stale results. The UI strategy override is explicit and does not modify the workbook.
+5. Review assignments, workshop allocation counts/capacity, preference-choice percentages, per-student outcomes, incomplete allocations and solver certification. Changing the workbook, strategy or time limit clears stale results. The UI strategy override is explicit and does not modify the workbook.
 
 The three-sheet template, defaults, column names and parser are retained. Older two-column Rules sheets still work. The optional template descriptions were written for Component 1: references to a future engine, Balanced-only support, and blank-choice overrides are superseded by the Component 2 rules below. Guidance is not solver input.
 
@@ -117,4 +117,10 @@ For synthetic testing on Streamlit Community Cloud, deploy branch `main`, entryp
 
 ## Verification
 
-The full automated suite passes on Python 3.12.14 and 3.14.9: **87 tests** on each. Tests include known objective tradeoffs, constraints, repeat scoring, four strategies, deterministic row-order behaviour, invalid inputs, and feasible/unknown timeout outcomes. Browser checks exercise each strategy, strict blank-choice eligibility, zero allocations, upload gating, and stale-result clearing.
+The original engine suite passed 87 tests on Python 3.12.14 and 3.14.9. With allocation-distribution tests, the suite now contains **92 tests**. Tests include known objective tradeoffs, constraints, repeat scoring, four strategies, deterministic row-order behaviour, invalid inputs, and feasible/unknown timeout outcomes. Browser checks exercise each strategy, strict blank-choice eligibility, zero allocations, upload gating, and stale-result clearing.
+
+## Allocation distributions
+
+After each run, workshop charts and tables show assigned session places, distinct students, total capacity, available places and fill percentage, including workshops with zero allocations. Repeat sessions consume multiple places but count the student only once within that workshop.
+
+Preference charts include every Choice_N rank, unranked allocations and students with no allocation. **Each choice received** counts distinct students receiving that exact rank, divided by all students in the workbook; a student may appear at several ranks, so the percentages can sum above 100%. **Best choice per student** assigns each student to their best received rank, unranked only, or no allocation; these mutually exclusive proportions sum to 100% before rounding. Both views include students without allocations in the denominator.

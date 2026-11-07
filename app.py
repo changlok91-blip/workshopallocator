@@ -3,6 +3,7 @@ from dataclasses import asdict
 import streamlit as st
 from workshop_input.models import STUDENTS, RULES, STRATEGIES
 from workshop_allocation import allocate
+from workshop_allocation.distribution import build_distributions
 from workshop_input.workbook import template_bytes, report_bytes
 from workshop_input.validation import validate_workbook
 
@@ -112,6 +113,34 @@ if allocation is not None:
              f"Preference points: {allocation.summary['preference_satisfaction_score']}")
     for warning in allocation.warnings:
         st.warning(warning)
+    distribution = build_distributions(result.data, allocation)
+    st.subheader("Workshop allocation distribution")
+    st.caption("Assigned places count session seats; students count distinct students in each workshop. "
+               "Repeat sessions can therefore use more places than the number of students. "
+               "Capacity is summed across the workshop's sessions; unused workshops are included.")
+    workshop_chart = distribution.workshops.copy()
+    workshop_chart["Workshop"] = workshop_chart["Workshop_ID"] + " · " + workshop_chart["Workshop_Name"]
+    st.bar_chart(workshop_chart, x="Workshop", y="Assigned_Places", sort=False)
+    st.dataframe(distribution.workshops, hide_index=True, width="stretch",
+                 column_config={"Filled (%)": st.column_config.NumberColumn(format="%.1f%%")})
+    st.subheader("Preference choice distribution")
+    st.caption(f"Percentages use all {allocation.summary['student_count']} students, including those with no allocation. "
+               "Choice 1 means first choice, Choice 2 means second choice, and so on.")
+    each_tab, best_tab = st.tabs(["Each choice received", "Best choice per student"])
+    with each_tab:
+        st.write("Students receiving each choice")
+        st.caption("A student is counted once per choice, even with repeated sessions. Students may receive "
+                   "several choices, so these percentages can total more than 100%. Unranked means at least one unranked assignment.")
+        st.bar_chart(distribution.each_choice, x="Choice", y="Students (%)", sort=False)
+        st.dataframe(distribution.each_choice, hide_index=True, width="stretch",
+                     column_config={"Students (%)": st.column_config.NumberColumn(format="%.1f%%")})
+    with best_tab:
+        st.write("Best ranked choice received by each student")
+        st.caption("Each student appears in exactly one category. Percentages total 100% before rounding. "
+                   "Unranked only means the student received places but no ranked choice.")
+        st.bar_chart(distribution.best_choice, x="Choice", y="Students (%)", sort=False)
+        st.dataframe(distribution.best_choice, hide_index=True, width="stretch",
+                     column_config={"Students (%)": st.column_config.NumberColumn(format="%.1f%%")})
     st.subheader("Student allocation preview")
     st.dataframe(allocation.assignments, hide_index=True, width="stretch")
     st.subheader("Per-student allocation summary")
